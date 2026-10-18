@@ -74,21 +74,6 @@ const photoGuides: Record<Category, string[]> = {
 const todayDate = new Date().toISOString().slice(0, 10)
 const defaultTrustFields: TrustField[] = ['identity', 'usage', 'condition', 'components', 'issues', 'checkedAt', 'photos']
 
-const sampleProducts: Product[] = [{
-  id: 'sample-headphones', name: 'WH-1000XM5', brand: 'Sony', modelName: 'WH-1000XM5', category: '헤드폰',
-  purchaseDate: '2024-08-20', purchasePrice: 420000, currentPrice: 359000, priceSource: '샘플 데이터 · 실제 가격 아님',
-  priceHistory: [
-    { price: 389000, checkedAt: '2026-06-10', source: '샘플 기록' },
-    { price: 379000, checkedAt: '2026-07-08', source: '샘플 기록' },
-    { price: 359000, checkedAt: '2026-09-23', source: '샘플 기록' },
-  ],
-  condition: '사용감 있음', components: '본체, 케이스', note: '이어패드 사용감 있음', imageDataUrls: [],
-  checks: { 전원: '정상', 충전: '정상', 블루투스: '정상', '좌우 음향': '정상', 버튼: '정상', 이어패드: '사용감 있음', 외관: '사용감 있음' },
-  checkNotes: { 이어패드: '쿠션에 사용감이 있어 사진으로 공개할 예정' }, checkImages: {},
-  preparation: { photos: { '제품 전체': true, '이어패드': true }, title: 'Sony WH-1000XM5 헤드폰 판매합니다', description: '' },
-  trustSheet: { isActive: false, publicToken: 'sample-trust-sheet', publishedFields: defaultTrustFields, checkedAt: '2026-09-23' },
-}]
-
 function formatPrice(price?: number) { return price === undefined ? '확인 필요' : `${price.toLocaleString('ko-KR')}원` }
 
 function getUsageDuration(purchaseDate: string) {
@@ -105,14 +90,37 @@ function createCheckNotes(category: Category) { return Object.fromEntries(catego
 function createCheckImages(category: Category) { return Object.fromEntries(categoryChecks[category].map((check) => [check, []])) as Record<string, string[]> }
 function createPreparation(category: Category): SellPreparation { return { photos: Object.fromEntries(photoGuides[category].map((guide) => [guide, false])), title: '', description: '' } }
 function createTrustSheet(): TrustSheet { return { isActive: false, publicToken: crypto.randomUUID(), publishedFields: defaultTrustFields, checkedAt: undefined } }
+function normalizeEmail(email: string) { return email.trim().toLowerCase() }
+function getProductsStorageKey(email: string) { return `sellready-products:${encodeURIComponent(normalizeEmail(email))}` }
+function getAccountProducts(email: string): Product[] {
+  const normalizedEmail = normalizeEmail(email)
+  const currentKey = getProductsStorageKey(normalizedEmail)
+  const currentProducts = normalizeProducts(localStorage.getItem(currentKey))
+  if (currentProducts) return currentProducts
+
+  const legacyPrefix = 'sellready-products:'
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index)
+    if (!key?.startsWith(legacyPrefix) || key === currentKey) continue
+    if (normalizeEmail(key.slice(legacyPrefix.length)) !== normalizedEmail) continue
+    return normalizeProducts(localStorage.getItem(key)) ?? []
+  }
+  return []
+}
 function buildListing(product: Product) { const issues = Object.entries(product.checks).filter(([, status]) => status === '사용감 있음' || status === '문제 있음').map(([item, status]) => `${item} ${status}${product.checkNotes[item] ? ` (${product.checkNotes[item]})` : ''}`).join(', '); const details = [`구매시기: ${product.purchaseDate}`, `사용기간: ${getUsageDuration(product.purchaseDate)}`, `상태: ${product.condition}`, `구성품: ${product.components || '미입력'}`]; if (issues) details.push(`공개사항: ${issues}`); return { title: `${product.brand ? `${product.brand} ` : ''}${product.name} 판매합니다`, description: `${details.join('\n')}\n\n직접 확인한 제품 상태를 바탕으로 작성한 판매글 초안입니다. 구매 전 사진과 상태를 함께 확인해주세요.` } }
 function readJson<T>(raw: string | null, fallback: T): T { if (!raw) return fallback; try { return JSON.parse(raw) as T } catch { return fallback } }
 function normalizeProducts(raw: string | null): Product[] | null { const parsed = readJson<unknown>(raw, null); if (!Array.isArray(parsed)) return null; return parsed.map((product) => { const item = product as Product; return { ...item, imageDataUrls: item.imageDataUrls ?? [], checkNotes: item.checkNotes ?? createCheckNotes(item.category), checkImages: item.checkImages ?? createCheckImages(item.category), priceHistory: item.priceHistory ?? [], preparation: item.preparation ?? createPreparation(item.category), trustSheet: item.trustSheet ?? createTrustSheet() } }) }
 function findPublicProduct(token: string): Product | undefined { for (let index = 0; index < localStorage.length; index += 1) { const key = localStorage.key(index); if (!key?.startsWith('sellready-products:')) continue; const products = normalizeProducts(localStorage.getItem(key)); const product = products?.find((item) => item.trustSheet.publicToken === token && item.trustSheet.isActive); if (product) return product } return undefined }
 
 function App() {
-  const [account, setAccount] = useState<Account | null>(() => readJson<Account | null>(localStorage.getItem('sellready-account'), null))
-  const [products, setProducts] = useState<Product[]>(() => normalizeProducts(localStorage.getItem('sellready-products')) ?? sampleProducts)
+  const [account, setAccount] = useState<Account | null>(() => {
+    const saved = readJson<Account | null>(localStorage.getItem('sellready-account'), null)
+    return saved?.email ? { ...saved, email: normalizeEmail(saved.email) } : null
+  })
+  const [products, setProducts] = useState<Product[]>(() => {
+    const saved = readJson<Account | null>(localStorage.getItem('sellready-account'), null)
+    return saved?.email ? getAccountProducts(saved.email) : []
+  })
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
@@ -120,14 +128,15 @@ function App() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState<'전체' | Category>('전체')
 
-  useEffect(() => { if (!account) return; try { localStorage.setItem(`sellready-products:${account.email}`, JSON.stringify(products)) } catch { console.error('SellReady data could not be saved.') } }, [account, products])
+  useEffect(() => { if (!account) return; try { localStorage.setItem(getProductsStorageKey(account.email), JSON.stringify(products)) } catch { console.error('SellReady data could not be saved.') } }, [account, products])
 
-  const selectedProduct = products.find((product) => product.id === selectedId) ?? products[0]
   const filteredProducts = products.filter((product) => {
     const query = searchQuery.trim().toLowerCase()
     const matchesQuery = !query || [product.name, product.brand, product.modelName].some((value) => value.toLowerCase().includes(query))
     return matchesQuery && (categoryFilter === '전체' || product.category === categoryFilter)
   })
+  const visibleProducts = activeView === 'vault' ? filteredProducts : products
+  const selectedProduct = visibleProducts.find((product) => product.id === selectedId) ?? visibleProducts[0]
   const completedChecks = selectedProduct ? Object.values(selectedProduct.checks).filter((status) => status !== '확인 필요').length : 0
   const totalChecks = selectedProduct ? Object.keys(selectedProduct.checks).length : 0
   const completedPhotos = selectedProduct ? Object.values(selectedProduct.preparation.photos).filter(Boolean).length : 0
@@ -137,15 +146,19 @@ function App() {
   function updateProduct(updated: Product) { setProducts((current) => current.map((product) => product.id === updated.id ? updated : product)) }
 
   function handleLogin(nextAccount: Account) {
-    const accountKey = `sellready-products:${nextAccount.email}`
-    const existing = normalizeProducts(localStorage.getItem(accountKey))
-    const legacy = normalizeProducts(localStorage.getItem('sellready-products'))
-    setProducts(existing ?? legacy ?? sampleProducts)
-    setAccount(nextAccount)
-    try { localStorage.setItem('sellready-account', JSON.stringify(nextAccount)) } catch { console.error('SellReady account could not be saved.') }
+    const normalizedAccount = { ...nextAccount, name: nextAccount.name.trim(), email: normalizeEmail(nextAccount.email) }
+    const accountProducts = getAccountProducts(normalizedAccount.email)
+    setProducts(accountProducts)
+    setAccount(normalizedAccount)
+    setSearchQuery('')
+    setCategoryFilter('전체')
+    setActiveView('vault')
+    setIsFormOpen(false)
+    setEditingId(null)
+    try { localStorage.setItem('sellready-account', JSON.stringify(normalizedAccount)) } catch { console.error('SellReady account could not be saved.') }
     setSelectedId(null)
   }
-  function handleLogout() { setAccount(null); localStorage.removeItem('sellready-account'); setActiveView('vault') }
+  function handleLogout() { setAccount(null); setProducts([]); setSelectedId(null); setIsFormOpen(false); setEditingId(null); setSearchQuery(''); setCategoryFilter('전체'); localStorage.removeItem('sellready-account'); setActiveView('vault') }
 
   function openCreate() { setEditingId(null); setIsFormOpen(true) }
   function openEdit() { if (selectedProduct) { setEditingId(selectedProduct.id); setIsFormOpen(true) } }
@@ -181,7 +194,7 @@ function App() {
     <div className="app-shell">
       <aside className="sidebar"><div className="brand"><span className="brand-mark">S</span><span>SellReady</span></div><p className="sidebar-kicker">MY SPACE</p><nav><button className={activeView === 'vault' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveView('vault')}>My Vault <span>{products.length}</span></button><button className={activeView === 'condition' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveView('condition')}>Condition Lab</button><button className={activeView === 'sell' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveView('sell')}>Sell Studio</button><button className={activeView === 'trust' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveView('trust')}>Trust Sheet</button></nav><div className="sidebar-footer"><span className="avatar">{account.name.slice(0, 2).toUpperCase()}</span><div><strong>{account.name}</strong><small>{account.email}</small></div><button className="logout-button" onClick={handleLogout}>로그아웃</button></div></aside>
       <main className="main-content"><header className="topbar"><div><p className="eyebrow">MY VAULT / 2026.10.10</p><h1>내 물건의 현재를<br /><em>기록하는 공간</em></h1></div><div className="topbar-actions">{activeView === 'sell' && selectedProduct && <button className="secondary-button" onClick={() => { void navigator.clipboard?.writeText(`${selectedProduct.preparation.title}\n\n${selectedProduct.preparation.description}`) }}>판매글 복사</button>}<button className="primary-button" onClick={openCreate}>+ 물건 등록</button></div></header>
-        {activeView === 'vault' ? <><section className="summary-strip"><div><span className="summary-label">보유 물건</span><strong>{products.length}<small>개</small></strong></div><div><span className="summary-label">현재 확인된 가치</span><strong>{formatPrice(products.reduce((sum, product) => sum + (product.currentPrice ?? 0), 0))}</strong></div><div><span className="summary-label">판매 준비 중</span><strong>{products.filter((product) => product.condition !== '정상').length}<small>개</small></strong></div></section><section className="content-section"><div className="section-heading"><div><p className="eyebrow">YOUR COLLECTION</p><h2>보유 물건</h2></div><button className="text-button" onClick={openCreate}>+ 새 물건 추가</button></div><div className="vault-toolbar"><label className="search-box"><span>⌕</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="제품명, 브랜드, 모델명 검색" aria-label="보유 물건 검색" /></label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as '전체' | Category)} aria-label="카테고리 필터"><option value="전체">전체 카테고리</option>{Object.keys(categoryChecks).map((category) => <option key={category} value={category}>{category}</option>)}</select></div>{filteredProducts.length ? <div className="product-grid">{filteredProducts.map((product) => <ProductCard key={product.id} product={product} selected={product.id === selectedProduct?.id} onClick={() => setSelectedId(product.id)} />)}</div> : <div className="filter-empty"><strong>조건에 맞는 물건이 없어요.</strong><span>검색어나 카테고리를 바꿔보세요.</span><button className="text-button" onClick={() => { setSearchQuery(''); setCategoryFilter('전체') }}>필터 초기화</button></div>}</section>{selectedProduct && <ProductDetail product={selectedProduct} readiness={readiness} onUpdate={updateProduct} onEdit={openEdit} onDelete={deleteSelected} onGoCondition={() => setActiveView('condition')} onGoSell={() => setActiveView('sell')} onGoTrust={() => setActiveView('trust')} />}</> : activeView === 'condition' ? selectedProduct ? <ConditionLab product={selectedProduct} onUpdate={updateProduct} /> : <EmptyState onAdd={openCreate} /> : activeView === 'sell' ? selectedProduct ? <SellStudio product={selectedProduct} readiness={readiness} onUpdate={updateProduct} onGoTrust={() => setActiveView('trust')} /> : <EmptyState onAdd={openCreate} /> : selectedProduct ? <TrustSheet product={selectedProduct} onUpdate={updateProduct} /> : <EmptyState onAdd={openCreate} />}
+        {activeView === 'vault' ? <><section className="summary-strip"><div><span className="summary-label">보유 물건</span><strong>{products.length}<small>개</small></strong></div><div><span className="summary-label">현재 확인된 가치</span><strong>{formatPrice(products.reduce((sum, product) => sum + (product.currentPrice ?? 0), 0))}</strong></div><div><span className="summary-label">판매 준비 중</span><strong>{products.filter((product) => product.condition !== '정상').length}<small>개</small></strong></div></section><section className="content-section"><div className="section-heading"><div><p className="eyebrow">YOUR COLLECTION</p><h2>보유 물건</h2></div><button className="text-button" onClick={openCreate}>+ 새 물건 추가</button></div><div className="vault-toolbar"><label className="search-box"><span>⌕</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="제품명, 브랜드, 모델명 검색" aria-label="보유 물건 검색" /></label><select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value as '전체' | Category)} aria-label="카테고리 필터"><option value="전체">전체 카테고리</option>{Object.keys(categoryChecks).map((category) => <option key={category} value={category}>{category}</option>)}</select></div>{filteredProducts.length ? <div className="product-grid">{filteredProducts.map((product) => <ProductCard key={product.id} product={product} selected={product.id === selectedProduct?.id} onClick={() => setSelectedId(product.id)} />)}</div> : <div className="filter-empty"><strong>{products.length === 0 ? '아직 등록한 물건이 없어요.' : '조건에 맞는 물건이 없어요.'}</strong><span>{products.length === 0 ? '상단의 “물건 등록”을 눌러 첫 물건을 추가해보세요.' : '검색어나 카테고리를 바꿔보세요.'}</span>{products.length > 0 && <button className="text-button" onClick={() => { setSearchQuery(''); setCategoryFilter('전체') }}>필터 초기화</button>}</div>}</section>{selectedProduct && <ProductDetail product={selectedProduct} readiness={readiness} onUpdate={updateProduct} onEdit={openEdit} onDelete={deleteSelected} onGoCondition={() => setActiveView('condition')} onGoSell={() => setActiveView('sell')} onGoTrust={() => setActiveView('trust')} />}</> : activeView === 'condition' ? selectedProduct ? <ConditionLab product={selectedProduct} onUpdate={updateProduct} /> : <EmptyState onAdd={openCreate} /> : activeView === 'sell' ? selectedProduct ? <SellStudio product={selectedProduct} readiness={readiness} onUpdate={updateProduct} onGoTrust={() => setActiveView('trust')} /> : <EmptyState onAdd={openCreate} /> : selectedProduct ? <TrustSheet product={selectedProduct} onUpdate={updateProduct} /> : <EmptyState onAdd={openCreate} />}
         <footer className="app-footer"><span>SELLREADY / 물건을 관리하고, 준비하고, 보내는 일</span><span>데이터는 이 브라우저에 안전하게 저장됩니다.</span></footer></main>
       {isFormOpen && <div className="modal-backdrop" onMouseDown={(event) => event.target === event.currentTarget && setIsFormOpen(false)}><form key={editingId ?? 'new'} className="modal" onSubmit={handleCreate}><div className="modal-heading"><div><p className="eyebrow">{editingId ? 'EDIT ITEM' : 'ADD TO VAULT'}</p><h2>{editingId ? '물건 정보 수정' : '새 물건 등록'}</h2></div><button type="button" className="close-button" onClick={() => setIsFormOpen(false)}>닫기</button></div><div className="form-grid"><label>제품명<input name="name" required defaultValue={editingId ? selectedProduct?.name : ''} placeholder="예: WH-1000XM5" /></label><label>브랜드<input name="brand" defaultValue={editingId ? selectedProduct?.brand : ''} placeholder="예: Sony" /></label><label>모델명<input name="modelName" defaultValue={editingId ? selectedProduct?.modelName : ''} placeholder="제품 모델명" /></label><label>카테고리<select name="category" defaultValue={editingId ? selectedProduct?.category : '헤드폰'}>{Object.keys(categoryChecks).map((category) => <option key={category}>{category}</option>)}</select></label><label>구매일<input name="purchaseDate" type="date" max={todayDate} required defaultValue={editingId ? selectedProduct?.purchaseDate : '2026-01-01'} /></label><label>구매가격<input name="purchasePrice" type="number" required min="0" defaultValue={editingId ? selectedProduct?.purchasePrice : ''} placeholder="420000" /></label><label className="wide">구성품<input name="components" defaultValue={editingId ? selectedProduct?.components : ''} placeholder="본체, 케이스, 케이블" /></label><label className="wide">개인 메모<textarea name="note" rows={3} defaultValue={editingId ? selectedProduct?.note : ''} placeholder="사용감, 보관 상태 등을 기록하세요." /></label></div><div className="modal-actions"><button type="button" className="secondary-button" onClick={() => setIsFormOpen(false)}>취소</button><button className="primary-button" type="submit">{editingId ? '변경사항 저장' : 'Vault에 저장'}</button></div></form></div>}
     </div>
@@ -198,7 +211,15 @@ function TrustSheet({ product, onUpdate }: { product: Product; onUpdate: (produc
 
 function PublicTrustSheet({ product }: { product?: Product }) { if (!product) return <div className="public-trust-shell"><div className="public-trust-card"><span className="brand-mark">S</span><h1>Trust Sheet를 찾을 수 없습니다</h1><p>링크가 만료되었거나 판매자가 공개를 중지했어요.</p></div></div>; const sheet = product.trustSheet; const issues = Object.entries(product.checks).filter(([, status]) => status === '사용감 있음' || status === '문제 있음'); return <div className="public-trust-shell"><article className="public-trust-card"><div className="preview-label">SELLREADY TRUST SHEET <span>PUBLIC</span></div>{sheet.publishedFields.includes('identity') && <><h1>{product.brand ? `${product.brand} ` : ''}{product.name}</h1><p className="preview-model">{product.modelName || '모델명 미입력'} · {product.category}</p></>}{sheet.publishedFields.includes('photos') && product.imageDataUrls.length > 0 && <div className="preview-images">{product.imageDataUrls.map((image, index) => <img key={`${image.slice(0, 20)}-${index}`} src={image} alt={`제품 사진 ${index + 1}`} />)}</div>}{sheet.publishedFields.includes('usage') && <div className="preview-row"><span>사용기간</span><strong>{getUsageDuration(product.purchaseDate)}</strong></div>}{sheet.publishedFields.includes('condition') && <div className="preview-block"><span>기능 확인 및 외관상태</span><p>{Object.entries(product.checks).filter(([, status]) => status === '정상').map(([item]) => `✓ ${item}`).join('  ') || '확인된 기능이 없습니다.'}</p><small>외관 · {product.condition}</small></div>}{sheet.publishedFields.includes('components') && <div className="preview-block"><span>구성품</span><p>{product.components || '미입력'}</p></div>}{sheet.publishedFields.includes('issues') && <div className="preview-block issue"><span>판매자 공개사항</span><p>{issues.length ? issues.map(([item, status]) => `${item} ${status}`).join(', ') : '특이사항 없음'}</p></div>}{sheet.publishedFields.includes('checkedAt') && <div className="preview-row"><span>최근 자가점검</span><strong>{sheet.checkedAt || '확인되지 않음'}</strong></div>}<p className="trust-disclaimer">본 정보는 판매자가 직접 입력·확인한 정보이며 SellReady의 전문 검수 또는 제품 품질보증을 의미하지 않습니다.</p></article></div> }
 
-function AuthView({ onLogin }: { onLogin: (account: Account) => void }) { function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const form = new FormData(event.currentTarget); onLogin({ name: String(form.get('name')).trim(), email: String(form.get('email')).trim().toLowerCase() }) } return <div className="auth-shell"><div className="auth-panel"><div className="brand auth-brand"><span className="brand-mark">S</span><span>SellReady</span></div><p className="eyebrow">PRIVATE OBJECT ARCHIVE</p><h1>내 물건의 현재를<br /><em>기록하는 공간</em></h1><p className="auth-copy">물건을 등록하고, 현재 가치를 확인하고,<br />판매를 결정하는 순간까지 준비해보세요.</p><form className="auth-form" onSubmit={submit}><label>이름<input name="name" required placeholder="이름을 입력하세요" /></label><label>이메일<input name="email" type="email" required placeholder="you@example.com" /></label><button className="primary-button" type="submit">내 Vault 시작하기</button></form><p className="prototype-note">현재는 프로토타입 단계입니다. 계정 정보와 물건 데이터는 이 브라우저에만 저장됩니다.</p></div></div> }
+function AuthView({ onLogin }: { onLogin: (account: Account) => void }) {
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const form = new FormData(event.currentTarget)
+    onLogin({ name: String(form.get('name')).trim(), email: String(form.get('email')).trim().toLowerCase() })
+  }
+
+  return <div className="auth-shell"><div className="auth-panel"><div className="brand auth-brand"><span className="brand-mark">S</span><span>SellReady</span></div><p className="eyebrow">PRIVATE OBJECT ARCHIVE</p><h1>내 물건의 현재를<br /><em>기록하는 공간</em></h1><p className="auth-copy">물건을 등록하고, 현재 가치를 확인하고,<br />판매를 결정하는 순간까지 준비해보세요.</p><form className="auth-form" onSubmit={submit}><label>이름<input name="name" autoComplete="name" required placeholder="이름을 입력하세요" /></label><label>이메일<input name="email" type="email" autoComplete="email" required placeholder="you@example.com" /></label><button className="primary-button" type="submit">내 Vault 시작하기</button></form><p className="prototype-note">같은 이메일로 다시 들어오면 이 브라우저에 저장된 Vault를 이어서 엽니다. 다른 이메일은 별도의 빈 Vault를 사용합니다. 현재는 비밀번호 없는 프로토타입 로그인이며, 실제 계정 보안을 제공하지 않습니다.</p></div></div>
+}
 
 function ConditionLab({ product, onUpdate }: { product: Product; onUpdate: (product: Product) => void }) { const checks = categoryChecks[product.category]; function updateCheck(check: string, status: ConditionStatus) { const checksNext = { ...product.checks, [check]: status }; onUpdate({ ...product, checks: checksNext, condition: Object.values(checksNext).some((value) => value === '문제 있음') ? '문제 있음' : Object.values(checksNext).some((value) => value === '사용감 있음') ? '사용감 있음' : '정상' }) } function updateNote(check: string, note: string) { onUpdate({ ...product, checkNotes: { ...product.checkNotes, [check]: note } }) } function addEvidence(check: string, event: ChangeEvent<HTMLInputElement>) { const file = event.target.files?.[0]; if (!file || !file.type.startsWith('image/') || file.size > 2 * 1024 * 1024) return; const reader = new FileReader(); reader.onload = () => { if (typeof reader.result === 'string') onUpdate({ ...product, checkImages: { ...product.checkImages, [check]: [...(product.checkImages[check] ?? []), reader.result] } }) }; reader.readAsDataURL(file); event.target.value = '' } return <section className="content-section condition-page"><div className="section-heading"><div><p className="eyebrow">CONDITION LAB / {product.name}</p><h2>상태를 하나씩 확인해요</h2><p className="section-description">직접 확인한 내용만 기록됩니다. 이 정보는 판매 준비와 Trust Sheet에 연결됩니다.</p></div><span className="lab-score">{Object.values(product.checks).filter((status) => status !== '확인 필요').length} / {checks.length}</span></div><div className="checklist">{checks.map((check) => <div className="check-row evidence-row" key={check}><div className="check-main"><strong>{check}</strong><small>{product.checks[check] === '확인 필요' ? '아직 확인하지 않았어요' : '확인 완료'}</small><input value={product.checkNotes[check] ?? ''} onChange={(event) => updateNote(check, event.target.value)} placeholder="메모를 남겨보세요" aria-label={`${check} 메모`} /><label className="evidence-upload">사진 추가<input type="file" accept="image/*" onChange={(event) => addEvidence(check, event)} /></label></div><select value={product.checks[check]} onChange={(event) => updateCheck(check, event.target.value as ConditionStatus)}><option>확인 필요</option><option>정상</option><option>사용감 있음</option><option>문제 있음</option></select></div>)}</div></section> }
 
