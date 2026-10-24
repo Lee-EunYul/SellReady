@@ -52,9 +52,16 @@ Azure OpenAI의 endpoint, key, deployment name은 서버에서만 사용합니�
 
 `.env`와 `.env.*`는 Git에서 제외됩니다. 실제 키를 채팅, 소스 코드, `VITE_*` 변수, 브라우저 코드 또는 GitHub 저장소에 넣지 마세요. Vite의 `VITE_*` 환경변수는 브라우저용 번들에 포함되어 사용자에게 노출됩니다.
 
-Azure 배포에서는 로컬 `.env`를 올리는 대신 Azure Portal → Static Web App → **Settings → Environment variables → Production**에 위 변수를 등록합니다. `AZURE_OPENAI_ALLOWED_EMAILS`에는 `/.auth/login/aad`로 로그인할 Microsoft 계정의 이메일을 입력합니다. 이 설정은 backend API에만 제공됩니다. 설정 후 Static Web App을 다시 배포하거나 설정 화면에서 저장해 반영한 뒤 Microsoft 계정으로 로그인하고 Sell Studio의 **AI로 판매글 생성** 버튼을 시험합니다. API는 사용자별 분당 5회 요청을 허용하며, 허용 목록이 없으면 기본 거부합니다.
+Azure 배포에서는 로컬 `.env`를 올리는 대신 Azure Portal → Static Web App `sellready-web-20261018` → **Settings → Environment variables → Production**에 다음 네 변수를 각각 추가하고 **Apply**를 눌러 저장합니다.
 
-로컬 Azure Functions API는 Azure Functions Core Tools가 필요합니다. `api` 폴더에서 `npm start`로 API를 띄운 뒤 Azure Static Web Apps CLI의 로컬 인증/API 프록시를 통해 프론트엔드와 함께 테스트합니다. Functions Core Tools가 없으면 AI 버튼에서 연결 오류가 나며, 기존 수동 판매글 편집 기능은 계속 사용할 수 있습니다.
+1. `AZURE_OPENAI_ENDPOINT`
+2. `AZURE_OPENAI_API_KEY`
+3. `AZURE_OPENAI_DEPLOYMENT`
+4. `AZURE_OPENAI_ALLOWED_EMAILS` — AI 사용을 허용할 Microsoft 로그인 이메일(여러 개는 쉼표로 구분)
+
+이 값들은 backend API에서만 읽힙니다. 저장 후 Microsoft 계정(`/.auth/login/aad`)으로 로그인하고 Sell Studio의 **AI로 판매글 생성**을 시험합니다. API는 허용 목록에 든 계정만 허용하고 사용자별 분당 5회 제한을 둡니다. 이 제한은 함수 인스턴스 메모리 기반의 기본 보호라, 더 강한 전역 한도가 필요하면 외부 저장소 기반 rate limit을 추가해야 합니다. 허용 목록이 없으면 기본 거부합니다.
+
+로컬 Azure Functions API는 Node.js 22와 Azure Functions Core Tools v4가 필요합니다. 먼저 프로젝트 루트에서 프론트엔드 `npm run dev`를 실행하고, 별도 터미널에서 `npm start --prefix api`로 API를 실행합니다. API는 `.env`에서 같은 서버 환경변수를 읽습니다. Functions Core Tools가 없거나 `.env` 값이 비어 있으면 AI 버튼에서 오류 안내가 나오며, 기존 수동 판매글 편집 기능은 계속 사용할 수 있습니다.
 
 ## 실제 배포 전 필수 작업
 
