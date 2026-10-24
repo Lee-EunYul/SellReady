@@ -1,7 +1,16 @@
 {
+  "platform": {
+    "apiRuntime": "node:22"
+  },
+  "routes": [
+    {
+      "route": "/api/*",
+      "allowedRoles": ["authenticated"]
+    }
+  ],
   "navigationFallback": {
     "rewrite": "/index.html",
-    "exclude": ["/assets/*", "/*.{css,ico,svg,png,jpg,jpeg,gif,webp,woff,woff2}"]
+    "exclude": ["/api/*", "/assets/*", "/*.{css,ico,svg,png,jpg,jpeg,gif,webp,woff,woff2}"]
   },
   "globalHeaders": {
     "X-Content-Type-Options": "nosniff",

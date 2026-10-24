@@ -12,6 +12,7 @@ SellReady는 보유한 물건의 구매정보, 현재 가치, 상태를 기록�
 - Sell Studio 사진 가이드와 이미지 업로드
 - 판매 준비도와 판매글 초안 생성
 - 판매글 복사
+- Azure OpenAI 기반 판매글 생성 API (Microsoft 로그인 및 이메일 allowlist 보호)
 - Trust Sheet 공개 필드 선택 및 읽기 전용 공개 링크
 - 업로드 이미지 기반 제품 카드와 Trust Sheet 미리보기
 
@@ -36,6 +37,24 @@ npm run preview
 현재 앱은 프로토타입 단계로 `localStorage`에 데이터를 저장합니다. 물건 기록은 이메일을 정규화한 계정별 저장 키에 분리되며, 다른 이메일로 로그인하면 새 Vault가 열립니다. 같은 이메일로 다시 로그인하면 해당 브라우저에 저장한 기록을 불러옵니다. 이전 버전의 이메일별 저장 데이터도 같은 이메일에 한해 이어받지만, 공용 저장 키나 샘플 제품은 어떤 계정에도 불러오지 않습니다.
 
 이 분리는 화면 동작을 위한 클라이언트 측 구분일 뿐 인증이나 보안 경계가 아닙니다. 저장소를 직접 열 수 있는 사람은 데이터를 볼 수 있고, 브라우저를 바꾸거나 저장공간을 지우면 기록이 사라질 수 있습니다. 실제 사용자의 개인정보 보호를 보장하지 않으므로 상용 서비스에서는 서버 인증과 데이터베이스 권한 검증이 필요합니다.
+
+## Azure OpenAI 환경변수
+
+Azure OpenAI의 endpoint, key, deployment name은 서버에서만 사용합니다. Sell Studio의 **AI로 판매글 생성** 버튼은 Azure Static Web Apps 관리형 Functions의 `/api/generate-listing`을 호출합니다. 이 API는 Azure Static Web Apps의 `authenticated` 역할로 보호되므로, AI 생성 전에 **Microsoft 계정으로 로그인**해야 합니다. 현재 앱의 이름·이메일 입력은 로컬 Vault용 프로토타입 로그인이며 Azure API 인증을 대신하지 않습니다.
+
+로컬 API를 실행할 때는 `.env.example`을 `.env`로 복사한 후 실제 값을 채웁니다. Azure 배포에서는 Azure Portal에서 Static Web App의 **Environment variables → Production**에 같은 이름의 값을 추가합니다.
+
+- `AZURE_OPENAI_ENDPOINT`: Azure OpenAI 리소스 Endpoint
+- `AZURE_OPENAI_API_KEY`: Azure Portal의 Key 1 또는 Key 2
+- `AZURE_OPENAI_DEPLOYMENT`: Azure AI Foundry/Portal에 표시되는 모델 배포 이름
+- `AZURE_OPENAI_ALLOWED_EMAILS`: AI 호출을 허용할 Microsoft 로그인 이메일(여러 명이면 쉼표로 구분)
+- `AZURE_OPENAI_API_VERSION`: 백엔드 SDK/API가 명시적으로 요구할 때만 설정
+
+`.env`와 `.env.*`는 Git에서 제외됩니다. 실제 키를 채팅, 소스 코드, `VITE_*` 변수, 브라우저 코드 또는 GitHub 저장소에 넣지 마세요. Vite의 `VITE_*` 환경변수는 브라우저용 번들에 포함되어 사용자에게 노출됩니다.
+
+Azure 배포에서는 로컬 `.env`를 올리는 대신 Azure Portal → Static Web App → **Settings → Environment variables → Production**에 위 변수를 등록합니다. `AZURE_OPENAI_ALLOWED_EMAILS`에는 `/.auth/login/aad`로 로그인할 Microsoft 계정의 이메일을 입력합니다. 이 설정은 backend API에만 제공됩니다. 설정 후 Static Web App을 다시 배포하거나 설정 화면에서 저장해 반영한 뒤 Microsoft 계정으로 로그인하고 Sell Studio의 **AI로 판매글 생성** 버튼을 시험합니다. API는 사용자별 분당 5회 요청을 허용하며, 허용 목록이 없으면 기본 거부합니다.
+
+로컬 Azure Functions API는 Azure Functions Core Tools가 필요합니다. `api` 폴더에서 `npm start`로 API를 띄운 뒤 Azure Static Web Apps CLI의 로컬 인증/API 프록시를 통해 프론트엔드와 함께 테스트합니다. Functions Core Tools가 없으면 AI 버튼에서 연결 오류가 나며, 기존 수동 판매글 편집 기능은 계속 사용할 수 있습니다.
 
 ## 실제 배포 전 필수 작업
 

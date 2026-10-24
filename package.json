@@ -6,8 +6,9 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "check": "npm run lint && npm run build",
+    "check": "npm run lint && npm run test:api && npm run build",
     "lint": "oxlint",
+    "test:api": "node --test api/test/listingLogic.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

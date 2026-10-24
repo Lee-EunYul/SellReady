@@ -29,6 +29,8 @@ jobs:
           cache: npm
       - name: Install dependencies
         run: npm ci
+      - name: Install API dependencies
+        run: npm ci --prefix api
       - name: Validate and build
         run: npm run check
       - name: Build And Deploy
@@ -42,7 +44,7 @@ jobs:
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig
           app_location: "dist" # Prebuilt Vite artifact
-          api_location: "" # Api source code path - optional
+          api_location: "api" # Azure Functions managed API
           output_location: "" # Deploy app_location as-is
           skip_app_build: true
           ###### End of Repository/Build Configurations ######
