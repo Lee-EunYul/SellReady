@@ -46,7 +46,7 @@ app.http('generateListing', {
     } catch {
       return jsonResponse(400, { error: '요청 본문을 읽지 못했습니다.' })
     }
-    if (rawBody.length > 16_000) return jsonResponse(413, { error: '요청이 너무 큽니다.' })
+    if (rawBody.length > 6_200_000) return jsonResponse(413, { error: '요청이 너무 큽니다. 사진 수를 줄이거나 더 작은 사진을 사용해주세요.' })
 
     let body
     try { body = JSON.parse(rawBody) } catch { return jsonResponse(400, { error: 'JSON 요청 본문이 필요합니다.' }) }

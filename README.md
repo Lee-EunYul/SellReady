@@ -13,6 +13,8 @@ SellReady는 보유한 물건의 구매정보, 현재 가치, 상태를 기록�
 - 판매 준비도와 판매글 초안 생성
 - 판매글 복사
 - Azure OpenAI 기반 판매글 생성 API (Microsoft 로그인 및 이메일 allowlist 보호)
+- AI 참고 판매가격 범위 (구매가·현재 신품가를 사용자가 선택 동의한 경우)
+- 선택 동의 시 제품 사진 최대 2장 외관 분석
 - Trust Sheet 공개 필드 선택 및 읽기 전용 공개 링크
 - 업로드 이미지 기반 제품 카드와 Trust Sheet 미리보기
 
@@ -67,6 +69,8 @@ az account set --subscription <구독 이름 또는 ID>
 CLI 스크립트가 네 변수를 Azure Static Web Apps의 서버 전용 Production API 설정에 적용합니다. 별도로 Portal에서 설정할 필요는 없습니다. 적용 후 Microsoft 계정(`/.auth/login/aad`)으로 로그인하고 Sell Studio에서 **AI로 판매글 생성**을 누릅니다. API는 allowlist 계정만 허용하며 Functions 인스턴스별 사용자당 분당 5회 제한을 둡니다. allowlist가 없으면 요청을 거부합니다.
 
 로컬 Azure Functions API는 Node.js 22와 Azure Functions Core Tools v4가 필요합니다. 먼저 프로젝트 루트에서 프론트엔드 `npm run dev`를 실행하고, 별도 터미널에서 `npm start --prefix api`로 API를 실행합니다. API는 `.env`에서 같은 서버 환경변수를 읽습니다. Functions Core Tools가 없거나 `.env` 값이 비어 있으면 AI 버튼에서 오류 안내가 나오며, 기존 수동 판매글 편집 기능은 계속 사용할 수 있습니다.
+
+AI 가격 제안은 실제 중고 거래 데이터나 자동 시세 조회 결과가 아닙니다. 사용자가 가격 입력 전송에 동의한 경우에만 구매가와 현재 신품가격을 Azure OpenAI로 보내 참고 추정 범위를 만듭니다. 실제 시장 시세·판매가격 보장이 아니며, 가격 입력이 부족하면 가격 제안을 생략합니다. 사진 분석도 사용자가 별도로 동의한 경우 최대 2장만 보내며, 모델이 볼 수 있는 외관 정보만 참고합니다. 기능, 배터리, 정품 여부는 사진만으로 판정하지 않습니다.
 
 ## 실제 배포 전 필수 작업
 

@@ -9,11 +9,29 @@ export type ListingFacts = {
   components: string
   checkedItems: string[]
   issues: string[]
+  priceInputs?: {
+    purchasePrice?: number
+    currentNewPrice?: number
+    checkedAt?: string
+    source?: string
+  } | null
+  images?: Array<{ label: string; dataUrl: string }>
+}
+
+export type PriceSuggestion = {
+  low: number
+  high: number
+  recommended: number
+  confidence: 'low' | 'medium' | 'high'
+  basis: string
+  disclaimer: string
 }
 
 export type ListingDraft = {
   title: string
   description: string
+  priceSuggestion: PriceSuggestion | null
+  priceSuggestionReason: string
 }
 
 export class ListingGenerationError extends Error {
@@ -46,6 +64,14 @@ export async function generateListing(facts: ListingFacts): Promise<ListingDraft
   if (typeof result?.title !== 'string' || typeof result.description !== 'string') {
     throw new ListingGenerationError('AI 응답 형식이 올바르지 않습니다.')
   }
+  const priceSuggestion = result.priceSuggestion && typeof result.priceSuggestion === 'object'
+    ? result.priceSuggestion as PriceSuggestion
+    : null
 
-  return { title: result.title, description: result.description }
+  return {
+    title: result.title,
+    description: result.description,
+    priceSuggestion,
+    priceSuggestionReason: typeof result.priceSuggestionReason === 'string' ? result.priceSuggestionReason : '',
+  }
 }

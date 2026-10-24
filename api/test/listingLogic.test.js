@@ -34,15 +34,35 @@ test('creates instructions that prohibit inventing facts', () => {
   const messages = createListingMessages(product)
   assert.match(messages[0].content, /확인되지 않은/)
   assert.match(messages[0].content, /하자/)
-  assert.match(messages[1].content, /Notebook/)
+  assert.match(messages[1].content[0].text, /Notebook/)
 })
 
 test('parses valid AI JSON and rejects malformed output', () => {
   assert.deepEqual(parseListingResponse('{"title":"Galaxy Book5","description":"외관 사용감이 있습니다."}'), {
     title: 'Galaxy Book5',
     description: '외관 사용감이 있습니다.',
+    priceSuggestion: null,
+    priceSuggestionReason: '',
   })
   assert.throws(() => parseListingResponse('not json'))
+})
+
+test('returns an explicitly non-market reference price range when provided valid inputs', () => {
+  const parsed = parseListingResponse(JSON.stringify({
+    title: 'Galaxy Book5',
+    description: '외관 사용감이 있습니다.',
+    priceSuggestion: { low: 800000, high: 1100000, recommended: 950000, confidence: 'high', basis: '입력 가격과 상태 참고' },
+  }))
+  assert.equal(parsed.priceSuggestion.recommended, 950000)
+  assert.equal(parsed.priceSuggestion.confidence, 'low')
+  assert.match(parsed.priceSuggestion.disclaimer, /실제 중고 거래 시세/)
+})
+
+test('rejects invalid price ranges', () => {
+  assert.throws(() => parseListingResponse(JSON.stringify({
+    title: '제품', description: '설명',
+    priceSuggestion: { low: 1000, high: 500, recommended: 700, confidence: 'low', basis: '입력' },
+  })), /가격 범위/)
 })
 
 test('requires an authenticated Static Web Apps principal', () => {
@@ -65,8 +85,21 @@ test('uses Azure OpenAI Responses v1 endpoint when the supplied endpoint include
   const request = buildAzureOpenAIRequest('https://resource.services.ai.azure.com/openai/v1/responses', 'deployment-name', '', product)
   assert.equal(request.url, 'https://resource.services.ai.azure.com/openai/v1/responses')
   assert.equal(request.body.model, 'deployment-name')
-  assert.match(request.body.input, /Galaxy Book5/)
+  assert.equal(request.body.input[1].content[0].type, 'input_text')
+  assert.match(request.body.input[1].content[0].text, /Galaxy Book5/)
   assert.equal(request.body.text.format.type, 'json_object')
+})
+
+test('sends opted-in photos and price inputs to Responses as structured image inputs', () => {
+  const product = sanitizeProductFacts({
+    name: 'Camera', category: '기타',
+    priceInputs: { purchasePrice: 300000, currentNewPrice: 250000, checkedAt: '2026-10-18', source: '판매처' },
+    images: [{ label: '외관 사진', dataUrl: 'data:image/jpeg;base64,AAAA' }],
+  })
+  const request = buildAzureOpenAIRequest('https://resource.services.ai.azure.com/openai/v1/responses', 'deployment-name', '', product)
+  const contents = request.body.input[1].content
+  assert.match(contents[0].text, /purchasePrice/)
+  assert.deepEqual(contents[2], { type: 'input_image', image_url: 'data:image/jpeg;base64,AAAA', detail: 'low' })
 })
 
 test('uses chat completions endpoint when a classic Azure OpenAI resource endpoint is supplied', () => {
@@ -74,6 +107,7 @@ test('uses chat completions endpoint when a classic Azure OpenAI resource endpoi
   const request = buildAzureOpenAIRequest('https://resource.openai.azure.com/', 'deployment-name', '2024-10-21', product)
   assert.equal(request.url, 'https://resource.openai.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2024-10-21')
   assert.equal(request.body.response_format.type, 'json_object')
+  assert.equal(request.body.messages[1].content[0].type, 'text')
 })
 
 test('extracts Responses API output_text and Chat Completions content', () => {
