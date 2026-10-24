@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { authorizeStaticWebAppsPrincipal, createListingMessages, parseListingResponse, sanitizeProductFacts } from '../src/listingLogic.js'
+import { authorizeStaticWebAppsPrincipal, buildAzureOpenAIRequest, createListingMessages, extractAzureOpenAIText, parseListingResponse, sanitizeProductFacts } from '../src/listingLogic.js'
 
 test('accepts only bounded product facts and excludes private fields', () => {
   const product = sanitizeProductFacts({
@@ -58,4 +58,26 @@ test('allows only configured authenticated emails', () => {
   const principal = Buffer.from(JSON.stringify({ userDetails: 'Owner@Example.com', userRoles: ['anonymous', 'authenticated'] })).toString('base64')
   assert.deepEqual(authorizeStaticWebAppsPrincipal(principal, 'owner@example.com'), { email: 'owner@example.com' })
   assert.equal(authorizeStaticWebAppsPrincipal(principal, 'other@example.com').status, 403)
+})
+
+test('uses Azure OpenAI Responses v1 endpoint when the supplied endpoint includes /openai/v1/responses', () => {
+  const product = sanitizeProductFacts({ name: 'Galaxy Book5', category: '노트북' })
+  const request = buildAzureOpenAIRequest('https://resource.services.ai.azure.com/openai/v1/responses', 'deployment-name', '', product)
+  assert.equal(request.url, 'https://resource.services.ai.azure.com/openai/v1/responses')
+  assert.equal(request.body.model, 'deployment-name')
+  assert.match(request.body.input, /Galaxy Book5/)
+  assert.equal(request.body.text.format.type, 'json_object')
+})
+
+test('uses chat completions endpoint when a classic Azure OpenAI resource endpoint is supplied', () => {
+  const product = sanitizeProductFacts({ name: 'Headphones', category: '헤드폰' })
+  const request = buildAzureOpenAIRequest('https://resource.openai.azure.com/', 'deployment-name', '2024-10-21', product)
+  assert.equal(request.url, 'https://resource.openai.azure.com/openai/deployments/deployment-name/chat/completions?api-version=2024-10-21')
+  assert.equal(request.body.response_format.type, 'json_object')
+})
+
+test('extracts Responses API output_text and Chat Completions content', () => {
+  assert.equal(extractAzureOpenAIText({ output_text: '{"title":"A","description":"B"}' }), '{"title":"A","description":"B"}')
+  assert.equal(extractAzureOpenAIText({ output: [{ type: 'message', content: [{ type: 'output_text', text: 'response text' }] }] }), 'response text')
+  assert.equal(extractAzureOpenAIText({ choices: [{ message: { content: 'chat text' } }] }), 'chat text')
 })

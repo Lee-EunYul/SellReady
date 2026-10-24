@@ -2,7 +2,7 @@ import { app } from '@azure/functions'
 import dotenv from 'dotenv'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { authorizeStaticWebAppsPrincipal, createListingMessages, parseListingResponse, sanitizeProductFacts } from '../listingLogic.js'
+import { authorizeStaticWebAppsPrincipal, buildAzureOpenAIRequest, extractAzureOpenAIText, parseListingResponse, sanitizeProductFacts } from '../listingLogic.js'
 
 // Locally read the repository-root .env regardless of the Functions host working directory.
 // Azure settings are injected by Static Web Apps and take precedence over this optional file.
@@ -68,26 +68,19 @@ app.http('generateListing', {
       return jsonResponse(503, { error: 'Azure OpenAI 서버 설정이 아직 완료되지 않았습니다.' })
     }
 
-    let endpointUrl
+    let requestConfig
     try {
-      endpointUrl = new URL(endpoint)
-      if (endpointUrl.protocol !== 'https:' || endpointUrl.username || endpointUrl.password) throw new Error('invalid endpoint')
+      requestConfig = buildAzureOpenAIRequest(endpoint, deployment, apiVersion, product)
     } catch {
       return jsonResponse(503, { error: 'Azure OpenAI endpoint 설정을 확인해주세요.' })
     }
 
-    const url = `${endpoint.replace(/\/+$/, '')}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions?api-version=${encodeURIComponent(apiVersion)}`
-
     try {
-      const upstream = await fetch(url, {
+      const upstream = await fetch(requestConfig.url, {
         method: 'POST',
         signal: AbortSignal.timeout(30_000),
         headers: { 'Content-Type': 'application/json', 'api-key': apiKey },
-        body: JSON.stringify({
-          messages: createListingMessages(product),
-          temperature: 0.2,
-          response_format: { type: 'json_object' },
-        }),
+        body: JSON.stringify(requestConfig.body),
       })
 
       if (!upstream.ok) {
@@ -101,7 +94,7 @@ app.http('generateListing', {
       }
 
       const result = await upstream.json()
-      const content = result?.choices?.[0]?.message?.content
+      const content = extractAzureOpenAIText(result)
       return jsonResponse(200, parseListingResponse(content))
     } catch (error) {
       context.warn(`Listing generation failed (${error instanceof Error ? error.name : 'unknown error'}).`)

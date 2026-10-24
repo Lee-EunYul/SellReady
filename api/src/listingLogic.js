@@ -76,6 +76,52 @@ export function createListingMessages(product) {
   ]
 }
 
+export function buildAzureOpenAIRequest(endpoint, deployment, apiVersion, product) {
+  const base = new URL(endpoint)
+  if (base.protocol !== 'https:' || base.username || base.password) {
+    throw new TypeError('Azure OpenAI endpoint는 HTTPS URL이어야 합니다.')
+  }
+
+  const normalizedPath = base.pathname.replace(/\/+$/, '')
+  const isV1Responses = /\/openai\/v1(?:\/responses)?$/i.test(normalizedPath)
+
+  if (isV1Responses) {
+    base.pathname = normalizedPath.endsWith('/responses') ? normalizedPath : `${normalizedPath}/responses`
+    base.search = ''
+    return {
+      url: base.toString(),
+      body: {
+        model: deployment,
+        input: `${createListingMessages(product).map((message) => `${message.role.toUpperCase()}:\n${message.content}`).join('\n\n')}`,
+        text: { format: { type: 'json_object' } },
+      },
+    }
+  }
+
+  base.pathname = `${normalizedPath}/openai/deployments/${encodeURIComponent(deployment)}/chat/completions`
+  base.search = `?api-version=${encodeURIComponent(apiVersion)}`
+  return {
+    url: base.toString(),
+    body: {
+      messages: createListingMessages(product),
+      temperature: 0.2,
+      response_format: { type: 'json_object' },
+    },
+  }
+}
+
+export function extractAzureOpenAIText(result) {
+  if (typeof result?.output_text === 'string') return result.output_text
+  if (typeof result?.choices?.[0]?.message?.content === 'string') return result.choices[0].message.content
+  const outputMessages = Array.isArray(result?.output) ? result.output : []
+  for (const item of outputMessages) {
+    if (item?.type !== 'message' || !Array.isArray(item.content)) continue
+    const text = item.content.find((part) => part?.type === 'output_text' && typeof part.text === 'string')?.text
+    if (text) return text
+  }
+  return undefined
+}
+
 export function parseListingResponse(content) {
   if (typeof content !== 'string' || content.length > 10000) {
     throw new TypeError('AI 응답 형식이 올바르지 않습니다.')
