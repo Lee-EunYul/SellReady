@@ -64,14 +64,7 @@ az account set --subscription <구독 이름 또는 ID>
 
 `.env`와 `.env.*`는 Git에서 제외됩니다. 실제 키를 채팅, 소스 코드, `VITE_*` 변수, 브라우저 코드 또는 GitHub 저장소에 넣지 마세요. Vite의 `VITE_*` 환경변수는 브라우저용 번들에 포함되어 사용자에게 노출됩니다.
 
-Portal을 사용하려면 Azure Static Web App `sellready-web-20261018` → **Settings → Environment variables → Production**에서 다음 네 변수를 추가하고 **Apply**를 누릅니다. 권장 기본 절차는 위 Azure CLI 스크립트입니다.
-
-1. `AZURE_OPENAI_ENDPOINT`
-2. `AZURE_OPENAI_API_KEY`
-3. `AZURE_OPENAI_DEPLOYMENT`
-4. `AZURE_OPENAI_ALLOWED_EMAILS` — AI 사용을 허용할 Microsoft 로그인 이메일(여러 개는 쉼표로 구분)
-
-이 값들은 backend API에서만 읽힙니다. Microsoft 계정(`/.auth/login/aad`)으로 로그인하고 Sell Studio에서 **AI로 판매글 생성**을 누릅니다. API는 allowlist 계정만 허용하며 인스턴스당 사용자별 분당 5회 제한이 있습니다. allowlist가 없으면 요청을 거부합니다.
+CLI 스크립트가 네 변수를 Azure Static Web Apps의 서버 전용 Production API 설정에 적용합니다. 별도로 Portal에서 설정할 필요는 없습니다. 적용 후 Microsoft 계정(`/.auth/login/aad`)으로 로그인하고 Sell Studio에서 **AI로 판매글 생성**을 누릅니다. API는 allowlist 계정만 허용하며 Functions 인스턴스별 사용자당 분당 5회 제한을 둡니다. allowlist가 없으면 요청을 거부합니다.
 
 로컬 Azure Functions API는 Node.js 22와 Azure Functions Core Tools v4가 필요합니다. 먼저 프로젝트 루트에서 프론트엔드 `npm run dev`를 실행하고, 별도 터미널에서 `npm start --prefix api`로 API를 실행합니다. API는 `.env`에서 같은 서버 환경변수를 읽습니다. Functions Core Tools가 없거나 `.env` 값이 비어 있으면 AI 버튼에서 오류 안내가 나오며, 기존 수동 판매글 편집 기능은 계속 사용할 수 있습니다.
 
