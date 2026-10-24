@@ -12,7 +12,7 @@ SellReady는 보유한 물건의 구매정보, 현재 가치, 상태를 기록�
 - Sell Studio 사진 가이드와 이미지 업로드
 - 판매 준비도와 판매글 초안 생성
 - 판매글 복사
-- Azure OpenAI 기반 판매글 생성 API (Microsoft 로그인 및 이메일 allowlist 보호)
+- Azure OpenAI 기반 판매글 생성 API (Microsoft 로그인한 모든 계정 사용 가능)
 - AI 참고 판매가격 범위 (구매가·현재 신품가를 사용자가 선택 동의한 경우)
 - 선택 동의 시 제품 사진 최대 2장 외관 분석
 - Trust Sheet 공개 필드 선택 및 읽기 전용 공개 링크
@@ -56,17 +56,16 @@ az account set --subscription <구독 이름 또는 ID>
 .\scripts\configure-azure-openai.ps1
 ```
 
-스크립트는 `.env`의 endpoint와 일치하는 Azure AI 리소스를 찾아 Key1과 Key2를 모두 재발급합니다. 새 Key1을 로컬 `.env`와 Azure Static Web Apps의 Production API 설정에 저장하고, 허용할 Microsoft 로그인 이메일을 터미널에서 묻습니다. API 키 값은 화면에 출력하지 않습니다. `.env`는 Git에서 제외되어 있으므로 키를 채팅이나 저장소에 올리지 마세요.
+스크립트는 `.env`의 endpoint와 일치하는 Azure AI 리소스를 찾아 Key1과 Key2를 모두 재발급합니다. 새 Key1을 로컬 `.env`와 Azure Static Web Apps의 Production API 설정에 저장합니다. API 키 값은 화면에 출력하지 않습니다. `.env`는 Git에서 제외되어 있으므로 키를 채팅이나 저장소에 올리지 마세요.
 
 - `AZURE_OPENAI_ENDPOINT`: Azure OpenAI 리소스 Endpoint
 - `AZURE_OPENAI_API_KEY`: API 키 (CLI 설정 스크립트가 재발급된 Key1을 저장)
 - `AZURE_OPENAI_DEPLOYMENT`: Azure AI Foundry/Portal에 표시되는 모델 배포 이름
-- `AZURE_OPENAI_ALLOWED_EMAILS`: AI 호출을 허용할 Microsoft 로그인 이메일(여러 명이면 쉼표로 구분)
 - `AZURE_OPENAI_API_VERSION`: 백엔드 SDK/API가 명시적으로 요구할 때만 설정
 
 `.env`와 `.env.*`는 Git에서 제외됩니다. 실제 키를 채팅, 소스 코드, `VITE_*` 변수, 브라우저 코드 또는 GitHub 저장소에 넣지 마세요. Vite의 `VITE_*` 환경변수는 브라우저용 번들에 포함되어 사용자에게 노출됩니다.
 
-CLI 스크립트가 네 변수를 Azure Static Web Apps의 서버 전용 Production API 설정에 적용합니다. 별도로 Portal에서 설정할 필요는 없습니다. 적용 후 Microsoft 계정(`/.auth/login/aad`)으로 로그인하고 Sell Studio에서 **AI로 판매글 생성**을 누릅니다. API는 allowlist 계정만 허용하며 Functions 인스턴스별 사용자당 분당 5회 제한을 둡니다. allowlist가 없으면 요청을 거부합니다.
+CLI 스크립트가 세 변수를 Azure Static Web Apps의 서버 전용 Production API 설정에 적용합니다. 별도로 Portal에서 설정할 필요는 없습니다. 적용 후 Microsoft 계정(`/.auth/login/aad`)으로 로그인하고 Sell Studio에서 **AI로 판매글 생성**을 누릅니다. API는 로그인한 모든 계정을 허용하며 Functions 인스턴스별 사용자당 분당 5회 제한을 둡니다. 제한은 이메일 대신 인증된 사용자 ID로 구분하며, 비로그인 요청은 차단합니다. 기존 `AZURE_OPENAI_ALLOWED_EMAILS` 설정이 남아 있어도 더 이상 사용하지 않습니다. 이 요청 제한은 인스턴스 메모리 기반이므로 전역 사용량·비용 한도를 보장하지 않습니다.
 
 로컬 Azure Functions API는 Node.js 22와 Azure Functions Core Tools v4가 필요합니다. 먼저 프로젝트 루트에서 프론트엔드 `npm run dev`를 실행하고, 별도 터미널에서 `npm start --prefix api`로 API를 실행합니다. API는 `.env`에서 같은 서버 환경변수를 읽습니다. Functions Core Tools가 없거나 `.env` 값이 비어 있으면 AI 버튼에서 오류 안내가 나오며, 기존 수동 판매글 편집 기능은 계속 사용할 수 있습니다.
 

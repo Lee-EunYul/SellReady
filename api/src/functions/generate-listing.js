@@ -17,14 +17,17 @@ const requestWindows = new Map()
 const RATE_LIMIT = 5
 const RATE_WINDOW_MS = 60_000
 
-function isRateLimited(email, now = Date.now()) {
-  const timestamps = (requestWindows.get(email) ?? []).filter((timestamp) => now - timestamp < RATE_WINDOW_MS)
+function isRateLimited(userKey, now = Date.now()) {
+  for (const [key, entries] of requestWindows) {
+    if (now - entries.at(-1) >= RATE_WINDOW_MS) requestWindows.delete(key)
+  }
+  const timestamps = (requestWindows.get(userKey) ?? []).filter((timestamp) => now - timestamp < RATE_WINDOW_MS)
   if (timestamps.length >= RATE_LIMIT) {
-    requestWindows.set(email, timestamps)
+    requestWindows.set(userKey, timestamps)
     return true
   }
   timestamps.push(now)
-  requestWindows.set(email, timestamps)
+  requestWindows.set(userKey, timestamps)
   return false
 }
 
@@ -35,10 +38,9 @@ app.http('generateListing', {
   handler: async (request, context) => {
     const authorization = authorizeStaticWebAppsPrincipal(
       request.headers.get('x-ms-client-principal'),
-      process.env.AZURE_OPENAI_ALLOWED_EMAILS,
     )
     if (authorization.error) return jsonResponse(authorization.status, { error: authorization.error })
-    if (isRateLimited(authorization.email)) return jsonResponse(429, { error: '분당 AI 요청 한도(5회)에 도달했습니다. 잠시 후 다시 시도해주세요.' })
+    if (isRateLimited(authorization.userKey)) return jsonResponse(429, { error: '분당 AI 요청 한도(5회)에 도달했습니다. 잠시 후 다시 시도해주세요.' })
 
     let rawBody
     try {

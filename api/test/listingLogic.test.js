@@ -66,18 +66,26 @@ test('rejects invalid price ranges', () => {
 })
 
 test('requires an authenticated Static Web Apps principal', () => {
-  assert.equal(authorizeStaticWebAppsPrincipal(null, 'owner@example.com').status, 401)
+  assert.equal(authorizeStaticWebAppsPrincipal(null).status, 401)
 })
 
-test('fails closed when the email allowlist is missing', () => {
-  const principal = Buffer.from(JSON.stringify({ userDetails: 'owner@example.com', userRoles: ['authenticated'] })).toString('base64')
-  assert.equal(authorizeStaticWebAppsPrincipal(principal, '').status, 503)
+test('allows all authenticated accounts without an email allowlist', () => {
+  for (const userId of ['owner', 'another-account']) {
+    const principal = Buffer.from(JSON.stringify({ userId, identityProvider: 'aad', userDetails: `${userId}@example.com`, userRoles: ['anonymous', 'authenticated'] })).toString('base64')
+    assert.deepEqual(authorizeStaticWebAppsPrincipal(principal), { userKey: JSON.stringify(['aad', userId]) })
+  }
 })
 
-test('allows only configured authenticated emails', () => {
-  const principal = Buffer.from(JSON.stringify({ userDetails: 'Owner@Example.com', userRoles: ['anonymous', 'authenticated'] })).toString('base64')
-  assert.deepEqual(authorizeStaticWebAppsPrincipal(principal, 'owner@example.com'), { email: 'owner@example.com' })
-  assert.equal(authorizeStaticWebAppsPrincipal(principal, 'other@example.com').status, 403)
+test('uses stable account identifiers even when email is absent', () => {
+  const principal = Buffer.from(JSON.stringify({ userId: 'account-id', identityProvider: 'aad', userRoles: ['authenticated'] })).toString('base64')
+  assert.deepEqual(authorizeStaticWebAppsPrincipal(principal), { userKey: '["aad","account-id"]' })
+})
+
+test('rejects malformed, anonymous and incomplete principals', () => {
+  for (const value of [null, {}, { userId: 'id', identityProvider: 'aad', userRoles: ['anonymous'] }, { userRoles: ['authenticated'] }]) {
+    assert.equal(authorizeStaticWebAppsPrincipal(Buffer.from(JSON.stringify(value)).toString('base64')).status, 401)
+  }
+  assert.equal(authorizeStaticWebAppsPrincipal('invalid').status, 401)
 })
 
 test('uses Azure OpenAI Responses v1 endpoint when the supplied endpoint includes /openai/v1/responses', () => {

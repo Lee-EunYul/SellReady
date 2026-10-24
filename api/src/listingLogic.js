@@ -1,7 +1,7 @@
 const MAX_TEXT_LENGTH = 300
 const MAX_ISSUES = 12
 
-export function authorizeStaticWebAppsPrincipal(encodedPrincipal, allowedEmails) {
+export function authorizeStaticWebAppsPrincipal(encodedPrincipal) {
   if (!encodedPrincipal) return { error: 'Microsoft 계정 로그인이 필요합니다.', status: 401 }
 
   let principal
@@ -11,15 +11,14 @@ export function authorizeStaticWebAppsPrincipal(encodedPrincipal, allowedEmails)
     return { error: '로그인 정보를 확인할 수 없습니다.', status: 401 }
   }
 
-  if (!Array.isArray(principal.userRoles) || !principal.userRoles.includes('authenticated')) {
+  if (!principal || !Array.isArray(principal.userRoles) || !principal.userRoles.includes('authenticated')) {
     return { error: '로그인이 필요합니다.', status: 401 }
   }
 
-  const email = typeof principal.userDetails === 'string' ? principal.userDetails.trim().toLowerCase() : ''
-  const allowlist = String(allowedEmails ?? '').split(',').map((value) => value.trim().toLowerCase()).filter(Boolean)
-  if (allowlist.length === 0) return { error: 'AI 사용 허용 계정이 아직 설정되지 않았습니다.', status: 503 }
-  if (!email || !allowlist.includes(email)) return { error: '이 계정에는 AI 판매글 생성 권한이 없습니다.', status: 403 }
-  return { email }
+  const userId = typeof principal.userId === 'string' ? principal.userId.trim() : ''
+  const provider = typeof principal.identityProvider === 'string' ? principal.identityProvider.trim() : ''
+  if (!userId || !provider) return { error: '로그인 정보를 확인할 수 없습니다. 다시 로그인해주세요.', status: 401 }
+  return { userKey: JSON.stringify([provider, userId]) }
 }
 
 function boundedText(value, maxLength = MAX_TEXT_LENGTH) {
