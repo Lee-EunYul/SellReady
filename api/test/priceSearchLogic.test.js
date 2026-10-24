@@ -46,8 +46,20 @@ test('sanitizer whitelists four bounded plain-text fields and drops every privat
   assert.deepEqual(sanitizePriceSearchProduct({ name: '제품', modelName: 'EXACT-1' }), { name: '제품', modelName: 'EXACT-1', brand: '', category: '' })
 })
 
-test('requires nonempty name and exact modelName and handles malformed/null products', () => {
-  for (const input of [null, undefined, [], 'product', 1, {}, { name: '제품' }, { modelName: 'EXACT' }, { name: '제품', modelName: 123 }, { name: '제품', modelName: '<b></b>' }]) assert.throws(() => sanitizePriceSearchProduct(input), TypeError)
+test('accepts name OR modelName and rejects malformed products or both identifiers missing', () => {
+  for (const input of [null, undefined, [], 'product', 1, {}, { name: ' ', modelName: 123 }, { name: '<b></b>', modelName: '<b></b>' }]) assert.throws(() => sanitizePriceSearchProduct(input), TypeError)
+  assert.equal(sanitizePriceSearchProduct({ name: 'Sony WH-1000XM5' }).modelName, '')
+  assert.equal(sanitizePriceSearchProduct({ modelName: 'EXACT' }).name, '')
+  assert.equal(sanitizePriceSearchProduct({ name: '제품', modelName: 123 }).name, '제품')
+})
+
+test('name-only search explicitly stops ambiguous categories and forbids invented models/options', () => {
+  const result = buildPriceSearchRequest(env.AZURE_OPENAI_ENDPOINT, env.AZURE_OPENAI_DEPLOYMENT, { name: '헤드폰' })
+  assert.equal(JSON.parse(result.body.input[1].content).product.modelName, '')
+  for (const term of ['modelName이 없어도', 'WH-1000XM5', '모호한 이름', 'offers=[]', 'reason', '추측하거나 만들지']) assert.ok(result.body.input[0].content.includes(term))
+  const empty = parse(response([], [], '모델을 구분할 구체적인 제품명이 필요합니다.'))
+  assert.deepEqual(empty.offers, [])
+  assert.match(empty.reason, /제품명/)
 })
 
 test('builds only minimal documented Responses v1 request, without private extras or JSON mode', () => {
@@ -205,11 +217,17 @@ test('handler requires existing SWA authorization before reading body or calling
   assert.equal(h.calls.length, 0)
 })
 
-test('handler rejects malformed/null JSON and absent exact model without upstream calls', async () => {
+test('handler rejects malformed/null JSON and missing both identifiers without upstream calls', async () => {
   const h = harness({ isRateLimited: () => false })
-  for (const body of ['', 'not json', 'null', '[]', '{}', '{"product":null}', '{"product":{"name":"제품"}}']) assert.equal((await h.invoke(request(body))).status, 400)
+  for (const body of ['', 'not json', 'null', '[]', '{}', '{"product":null}', '{"product":{"category":"헤드폰"}}']) assert.equal((await h.invoke(request(body))).status, 400)
   assert.equal((await h.invoke(request('', { method: 'GET' }))).status, 405)
   assert.equal(h.calls.length, 0)
+})
+
+test('handler accepts name-only and model-only requests', async () => {
+  const h = harness()
+  for (const input of [{ name: 'Sony WH-1000XM5' }, { modelName: 'WH-1000XM5' }]) assert.equal((await h.invoke(request(JSON.stringify({ product: input })))).status, 200)
+  assert.equal(h.calls.length, 2)
 })
 
 test('handler caps actual UTF-8 body at 4KB, including missing/dishonest length headers', async () => {
@@ -288,4 +306,14 @@ test('handler returns empty offers for malformed model output and missing citati
     assert.equal(result.status, 200)
     assert.deepEqual((await result.json()).offers, [])
   }
+})
+
+test('recovers Azure rendered citations inside URL strings only when both targets match actual annotations', () => {
+  const decorated = { ...offer, url: `${offer.url} ([shop.example.com](${offer.url}))` }
+  assert.equal(parse(response([decorated])).offers[0].url, offer.url)
+  assert.equal(parse(response([decorated], [])).offers.length, 0)
+  const mismatched = { ...offer, url: `${offer.url} ([shop.example.com](https://evil.example.com/))` }
+  assert.equal(parse(response([mismatched])).offers.length, 0)
+  const ungrounded = { ...offer, url: `https://shop.example.com/other ([shop.example.com](https://shop.example.com/other))` }
+  assert.equal(parse(response([ungrounded])).offers.length, 0)
 })

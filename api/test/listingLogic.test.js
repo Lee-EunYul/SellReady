@@ -24,6 +24,26 @@ test('rejects a missing required product name', () => {
   assert.throws(() => sanitizeProductFacts({ category: '기타' }), /제품명과 카테고리/)
 })
 
+test('derives elapsed age from purchase date instead of trusting client usage duration', () => {
+  const product = sanitizeProductFacts({ name: 'Camera', category: '기타', purchaseDate: '2024-10-25', usageDuration: '새 제품' }, new Date('2026-10-24T00:00:00Z'))
+  assert.match(product.usageDuration, /23개월/)
+  for (const purchaseDate of ['2027-01-01', '2026-02-30', '']) {
+    const invalid = sanitizeProductFacts({ name: 'Camera', category: '기타', purchaseDate }, new Date('2026-10-24T00:00:00Z'))
+    assert.match(invalid.usageDuration, /미확인/)
+  }
+})
+
+test('permits valuation from new price without requiring original purchase price', () => {
+  const product = sanitizeProductFacts({ name: 'Camera', category: '기타', priceInputs: { currentNewPrice: 100000 } })
+  assert.match(createListingMessages(product)[0].content, /구매가격은 없어도/)
+  const content = JSON.stringify({ title: '판매', description: '설명', priceSuggestion: { low: 40000, high: 60000, recommended: 50000, confidence: 'low', basis: '신품가격·사용감 참고' } })
+  assert.equal(parseListingResponse(content, product).priceSuggestion.recommended, 50000)
+  const noPrice = sanitizeProductFacts({ name: 'Camera', category: '기타', priceInputs: { purchasePrice: 150000 } })
+  assert.equal(parseListingResponse(content, noPrice).priceSuggestion, null)
+  const excessive = sanitizeProductFacts({ name: 'Camera', category: '기타', priceInputs: { currentNewPrice: 30000 } })
+  assert.equal(parseListingResponse(content, excessive).priceSuggestion, null)
+})
+
 test('limits issue details to twelve facts', () => {
   const product = sanitizeProductFacts({ name: 'Notebook', category: '기타', issues: Array.from({ length: 20 }, (_, index) => `issue-${index}`) })
   assert.equal(product.issues.length, 12)

@@ -41,3 +41,14 @@
 .ai-price-offers li { min-width: 0; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; }
 .ai-price-offers a { display: block; margin-top: 5px; color: #245abb; font-size: 12px; overflow-wrap: anywhere; }
 .ai-listing-action > .primary-button { grid-column: 1 / -1; min-height: 42px; color: #fff; }
+.ai-listing-heading,
+.ai-listing-action .ai-secondary-note,
+.ai-progress,
+.ai-identity-result { grid-column: 1 / -1; }
+.ai-listing-action > .primary-button { white-space: normal; }
+.ai-listing-action .ai-listing-only { justify-self: start; margin-top: 0; }
+.ai-listing-action .ai-secondary-note { margin-top: -5px; }
+.ai-listing-action .ai-progress { color: #253b72; font-weight: 700; }
+.ai-identity-result { min-width: 0; padding: 13px 15px; border: 1px solid #d8e2f8; border-radius: 9px; background: #fff; }
+.ai-identity-result ul { margin: 7px 0 0; padding-left: 18px; color: #475467; font-size: 12px; line-height: 1.6; overflow-wrap: anywhere; }
+.ai-listing-action .ai-selected-price { margin-top: 10px; color: #253b72; font-weight: 700; }
