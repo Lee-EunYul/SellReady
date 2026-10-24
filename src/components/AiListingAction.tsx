@@ -1,6 +1,6 @@
 import { useState } from 'react'
-import { generateListing, ListingGenerationError } from '../services/listingGenerator'
-import type { ListingFacts, ListingDraft, PriceSuggestion } from '../services/listingGenerator'
+import { generateListing, searchNewPrice, ListingGenerationError } from '../services/listingGenerator'
+import type { ListingFacts, ListingDraft, PriceSuggestion, NewPriceSearch, NewPriceOffer } from '../services/listingGenerator'
 import './AiListingAction.css'
 
 type ProductFactsSource = {
@@ -83,6 +83,28 @@ export function AiListingAction({ product, onGenerated }: { product: ProductFact
   const [message, setMessage] = useState<string | null>(null)
   const [priceSuggestion, setPriceSuggestion] = useState<PriceSuggestion | null>(null)
   const [priceSuggestionReason, setPriceSuggestionReason] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [searchResult, setSearchResult] = useState<NewPriceSearch | null>(null)
+  const [selectedOffer, setSelectedOffer] = useState<NewPriceOffer | null>(null)
+
+  async function handlePriceSearch() {
+    setIsSearching(true)
+    setSearchResult(null)
+    setSelectedOffer(null)
+    setError(null)
+    setRequiresSignIn(false)
+    setAccessDenied(false)
+    try {
+      setSearchResult(await searchNewPrice({ name: product.name, brand: product.brand, modelName: product.modelName, category: product.category }))
+    } catch (cause) {
+      const failure = cause instanceof ListingGenerationError ? cause : new ListingGenerationError('가격 검색에 연결하지 못했습니다. 잠시 후 다시 시도해주세요.')
+      setError(failure.message)
+      setRequiresSignIn(failure.status === 401 || failure.status === 403)
+      setAccessDenied(failure.status === 403)
+    } finally {
+      setIsSearching(false)
+    }
+  }
 
   async function handleGenerate() {
     setIsGenerating(true)
@@ -94,7 +116,13 @@ export function AiListingAction({ product, onGenerated }: { product: ProductFact
     setAccessDenied(false)
 
     try {
-      const draft = await generateListing(toListingFacts(product, includePriceInputs, includePhotos))
+      const facts = toListingFacts(product, includePriceInputs, includePhotos)
+      if (includePriceInputs && selectedOffer && facts.priceInputs) {
+        facts.priceInputs.currentNewPrice = selectedOffer.price
+        facts.priceInputs.source = selectedOffer.url
+        facts.priceInputs.checkedAt = searchResult?.checkedAt.slice(0, 10)
+      }
+      const draft = await generateListing(facts)
       onGenerated(draft)
       setPriceSuggestion(draft.priceSuggestion)
       setPriceSuggestionReason(draft.priceSuggestionReason)
@@ -115,11 +143,30 @@ export function AiListingAction({ product, onGenerated }: { product: ProductFact
         <strong>AI 판매글 작성</strong>
         <p>점검한 사실만 사용합니다. AI 요청에는 개인 메모를 포함하지 않습니다.</p>
       </div>
+      <div className="ai-price-search">
+        <strong>신품가격 직접 찾기</strong>
+        <p>제품명·브랜드·모델명·카테고리를 외부 웹 검색에 전송합니다. 검색 도구 사용에 추가 비용이 발생할 수 있습니다.</p>
+        <p>정확한 모델명과 용량·사양을 제품 정보에 입력해주세요. 사진·구매가·개인 메모는 검색에 보내지 않습니다.</p>
+        <button className="ai-search-button" type="button" disabled={isSearching || isGenerating || !product.modelName.trim()} onClick={() => void handlePriceSearch()}>{isSearching ? '판매처 가격 검색 중…' : '동의하고 AI로 신품가격 검색'}</button>
+        {!product.modelName.trim() && <p>제품 수정에서 정확한 모델명을 먼저 입력해주세요.</p>}
+        {searchResult && <>
+          <p>조회: {new Date(searchResult.checkedAt).toLocaleString('ko-KR')}</p>
+          <p>{searchResult.disclaimer}</p>
+          {searchResult.offers.length === 0 && <p role="status">{searchResult.reason || '확인 가능한 판매정보가 없습니다. 수동 가격 입력은 계속 사용할 수 있습니다.'}</p>}
+          <ul className="ai-price-offers">{searchResult.offers.map((offer) => <li key={offer.url}>
+            <strong>{offer.price.toLocaleString('ko-KR')}원 · {offer.seller}</strong>
+            <a href={offer.url} target="_blank" rel="noopener noreferrer">{offer.title} · 판매처 확인 ↗</a>
+            {offer.note && <p>{offer.note}</p>}
+            <button type="button" className="ai-search-button" aria-pressed={selectedOffer?.url === offer.url} disabled={isGenerating} onClick={() => { setSelectedOffer(offer); setIncludePriceInputs(true); setPriceSuggestion(null); setPriceSuggestionReason('') }}>{selectedOffer?.url === offer.url ? '선택됨 · 이번 생성에 사용' : '동일 모델·옵션 확인 후 이 가격 사용'}</button>
+          </li>)}</ul>
+          {selectedOffer && <p role="status">이번 생성 기준 신품가: {selectedOffer.price.toLocaleString('ko-KR')}원. 제품 가격 기록은 변경하지 않습니다.</p>}
+        </>}
+      </div>
       <div className="ai-consent-options">
         <label><input type="checkbox" checked={includePriceInputs} onChange={(event) => setIncludePriceInputs(event.target.checked)} /> 참고 가격 제안 (구매가·현재 신품가 전송)</label>
         <label><input type="checkbox" checked={includePhotos} onChange={(event) => setIncludePhotos(event.target.checked)} /> 사진으로 외관 참고 (최대 2장 전송)</label>
       </div>
-      <button className="primary-button" type="button" onClick={() => void handleGenerate()} disabled={isGenerating}>
+      <button className="primary-button" type="button" onClick={() => void handleGenerate()} disabled={isGenerating || isSearching}>
         {isGenerating ? '생성 중…' : 'AI로 판매글 생성'}
       </button>
       {priceSuggestion && <div className="ai-price-suggestion"><span>AI 참고 가격대 · {priceSuggestion.confidence === 'high' ? '근거 충분' : priceSuggestion.confidence === 'medium' ? '참고 수준' : '불확실성 높음'}</span><strong>{priceSuggestion.low.toLocaleString('ko-KR')}원 ~ {priceSuggestion.high.toLocaleString('ko-KR')}원</strong><p>추천 시작가 {priceSuggestion.recommended.toLocaleString('ko-KR')}원 · {priceSuggestion.basis}</p><small>{priceSuggestion.disclaimer}</small></div>}

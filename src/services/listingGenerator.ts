@@ -34,6 +34,34 @@ export type ListingDraft = {
   priceSuggestionReason: string
 }
 
+export type NewPriceOffer = {
+  title: string
+  price: number
+  currency: 'KRW'
+  seller: string
+  url: string
+  note: string
+}
+
+export type NewPriceSearch = {
+  offers: NewPriceOffer[]
+  reason: string
+  checkedAt: string
+  disclaimer: string
+}
+
+export async function searchNewPrice(product: Pick<ListingFacts, 'name' | 'brand' | 'modelName' | 'category'>): Promise<NewPriceSearch> {
+  const response = await fetch('/api/search-new-price', {
+    method: 'POST', credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ product }),
+  })
+  const result = await response.json().catch(() => null)
+  if (!response.ok) throw new ListingGenerationError(result?.error || '신품가격 검색에 실패했습니다.', response.status)
+  if (!Array.isArray(result?.offers) || typeof result.checkedAt !== 'string') throw new ListingGenerationError('가격 검색 응답 형식이 올바르지 않습니다.')
+  return result as NewPriceSearch
+}
+
 export class ListingGenerationError extends Error {
   readonly status?: number
 

@@ -97,7 +97,7 @@ app.http('generateListing', {
 
       const result = await upstream.json()
       const content = extractAzureOpenAIText(result)
-      return jsonResponse(200, parseListingResponse(content))
+      return jsonResponse(200, parseListingResponse(content, product))
     } catch (error) {
       context.warn(`Listing generation failed (${error instanceof Error ? error.name : 'unknown error'}).`)
       if (error instanceof TypeError) return jsonResponse(502, { error: 'AI 응답을 판매글로 변환하지 못했습니다. 다시 시도해주세요.' })

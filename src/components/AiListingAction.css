@@ -28,16 +28,16 @@
 .ai-price-suggestion > strong { display: block; margin-top: 5px; color: #172033; font-size: 20px; }
 .ai-price-suggestion p { color: #344054; font-size: 11px; }
 .ai-price-suggestion small { display: block; margin-top: 6px; color: #667085; font-size: 10px; line-height: 1.5; }
-.ai-consent-options { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 18px; }
-.ai-consent-options label { display: inline-flex; align-items: center; gap: 7px; color: #475467; font-size: 11px; }
-.ai-consent-options input { accent-color: #2563eb; }
-.ai-price-suggestion { grid-column: 1 / -1; padding: 13px 15px; border: 1px solid #f0d28a; border-radius: 8px; background: #fff9e8; }
-.ai-price-suggestion > span { display: block; color: #946200; font-size: 10px; font-weight: 700; }
-.ai-price-suggestion > strong { display: block; margin-top: 5px; color: #172033; font-size: 20px; }
-.ai-price-suggestion p { color: #344054; font-size: 11px; }
-.ai-price-suggestion small { display: block; margin-top: 6px; color: #667085; font-size: 10px; line-height: 1.5; }
 
 @media (max-width: 600px) {
   .ai-listing-action { grid-template-columns: 1fr; padding: 14px; }
   .ai-listing-action button { width: 100%; }
 }
+
+.ai-price-search { grid-column: 1 / -1; min-width: 0; padding: 14px; background: #fff; border: 1px solid #d8e2f8; border-radius: 9px; }
+.ai-listing-action .ai-search-button { margin-top: 10px; padding: 9px 12px; border: 1px solid #b7c8ee; border-radius: 7px; background: #eef3ff; color: #253b72; font: inherit; font-size: 12px; cursor: pointer; white-space: normal; }
+.ai-listing-action .ai-search-button[aria-pressed="true"] { background: #dcebe4; border-color: #8db7a2; color: #16634b; }
+.ai-price-offers { display: grid; gap: 12px; margin: 12px 0 0; padding: 0; list-style: none; }
+.ai-price-offers li { min-width: 0; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.ai-price-offers a { display: block; margin-top: 5px; color: #245abb; font-size: 12px; overflow-wrap: anywhere; }
+.ai-listing-action > .primary-button { grid-column: 1 / -1; min-height: 42px; color: #fff; }

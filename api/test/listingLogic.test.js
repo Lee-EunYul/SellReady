@@ -58,11 +58,14 @@ test('returns an explicitly non-market reference price range when provided valid
   assert.match(parsed.priceSuggestion.disclaimer, /실제 중고 거래 시세/)
 })
 
-test('rejects invalid price ranges', () => {
-  assert.throws(() => parseListingResponse(JSON.stringify({
+test('preserves a valid listing when the optional price range is invalid', () => {
+  const draft = parseListingResponse(JSON.stringify({
     title: '제품', description: '설명',
     priceSuggestion: { low: 1000, high: 500, recommended: 700, confidence: 'low', basis: '입력' },
-  })), /가격 범위/)
+  }))
+  assert.equal(draft.title, '제품')
+  assert.equal(draft.priceSuggestion, null)
+  assert.match(draft.priceSuggestionReason, /검증하지 못/)
 })
 
 test('requires an authenticated Static Web Apps principal', () => {
@@ -95,7 +98,9 @@ test('uses Azure OpenAI Responses v1 endpoint when the supplied endpoint include
   assert.equal(request.body.model, 'deployment-name')
   assert.equal(request.body.input[1].content[0].type, 'input_text')
   assert.match(request.body.input[1].content[0].text, /Galaxy Book5/)
-  assert.equal(request.body.text.format.type, 'json_object')
+  assert.equal(request.body.text.format.type, 'json_schema')
+  assert.equal(request.body.text.format.strict, true)
+  assert.equal(request.body.store, false)
 })
 
 test('sends opted-in photos and price inputs to Responses as structured image inputs', () => {
